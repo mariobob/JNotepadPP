@@ -5,6 +5,7 @@ import java.awt.Color;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.GridLayout;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
@@ -12,6 +13,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
@@ -24,9 +26,12 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
+import java.util.OptionalDouble;
 import java.util.StringJoiner;
 import java.util.function.Function;
 
@@ -51,8 +56,10 @@ import javax.swing.JTextArea;
 import javax.swing.JToolBar;
 import javax.swing.JViewport;
 import javax.swing.KeyStroke;
+import javax.swing.LookAndFeel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 import javax.swing.WindowConstants;
 import javax.swing.event.CaretEvent;
 import javax.swing.event.CaretListener;
@@ -67,15 +74,15 @@ import javax.swing.text.Document;
 import hr.fer.zemris.java.hw11.jnotepadpp.localization.*;
 
 /**
- * <u>The program JNotepadPP</u> is a textual editor equipped with specialized
- * buttons, menus, tabs actions, editing functions and even languages.
+ * Program JNotepadPP is a textual editor equipped with specialized buttons,
+ * menus, tabs actions, editing functions and even languages.
  * <p>
  * Almost all actions have shortcut key strokes and mnemonic keys, a name,
  * description and an image icon.
  * <p>
- * <u>The tabs</u> can be opened by double-clicking on the <tt>JTabbedPane</tt>
- * or by hitting the <b>CTRL+N key</b> combination and can be closed by pressing
- * the <b>CTRL+W</b> key combination.
+ * Tabs can be opened by double-clicking on the <tt>JTabbedPane</tt> or by
+ * hitting the <b>CTRL+N key</b> combination and can be closed by pressing the
+ * middle mouse button on a tab or by <b>CTRL+W</b> key combination.
  * <p>
  * File manipulation actions are disabled when no document is present <i>(when
  * there are no tabs opened)</i>. Some text manipulation actions are disabled
@@ -83,19 +90,19 @@ import hr.fer.zemris.java.hw11.jnotepadpp.localization.*;
  * action)</i>, and those that remain enabled can manipulate the whole text area
  * <i>(i.e. the case changing actions and statistics action)</i>.
  * <p>
- * <u>The task bar</u> and status bar are both added to the bottom of the
- * window, however <b>the task bar may be moved since it is a floatable
- * object</b>. The task bar can also be hidden from the whole frame.
+ * Task bar and status bar are added to the top and bottom of the window, however
+ * <b>the task bar may be moved since it is a floatable object</b>. The task bar
+ * can also be hidden from the whole frame.
  * <p>
- * <u>The status bar</u> shows some info about the current editor's caret (line
- * number, column number, selection length) and contains a unique clock that
- * shows date and time.
+ * Status bar shows some info about the current editor's caret (line number,
+ * column number, selection length) and contains a unique clock that shows date
+ * and time.
  * <p>
- * <u>The language words</u> are constants, in a way that every language is on
- * it's own translation. This prevents users to get lost in the application.
+ * Language words are constants, in a way that every language is on it's own
+ * translation. This prevents users to get lost in the application.
  * <p>
- * <u>The about page</u> is translated into every available language and
- * contains some info about the application and its developer.
+ * About page is translated into every available language and contains some info
+ * about the application and its developer.
  *
  * @author Mario Bobic
  * @version 1.0
@@ -105,12 +112,16 @@ public class JNotepadPP extends JFrame {
 	private static final long serialVersionUID = 1L;
 	
 	/** Title of the frame. */
-	private static final String FRAME_TITLE = "JNotepad++";
+	public static final String FRAME_TITLE = "JNotepad++";
 	
 	/** Form localization provider from which strings are taken. */
-	private FormLocalizationProvider flp =
+	public final FormLocalizationProvider flp =
 			new FormLocalizationProvider(LocalizationProvider.getInstance(), this);
 	
+	/** Default application font set to every editor. */
+	private static final Font MONOSPACED_FONT = new Font(Font.MONOSPACED, Font.PLAIN, 12);
+	/** Default tab size set to every editor. */
+	private static final int DEFAULT_TAB_SIZE = 4;
 	
 	/** Tabs of the JNotepad++. */
 	private JTabbedPane tabs;
@@ -126,6 +137,9 @@ public class JNotepadPP extends JFrame {
 	
 	/** Cached instance of file chooser for remembering last place. */
 	private JFileChooser fileChooser;
+	
+	/** Currently used font, default set to {@linkplain #MONOSPACED_FONT}. */
+	private Font currentFont = MONOSPACED_FONT;
 	
 	/**
 	 * Constructs and initializes this frame with GUI components.
@@ -158,30 +172,32 @@ public class JNotepadPP extends JFrame {
 		statusBar = new StatusBar();
 		toolBar = createToolbars();
 		
-		fileChooser = new JFileChooser();
+		fileChooser = createJFileChooser();
 		
 		Container cp = getContentPane();
-		
 		cp.setLayout(new BorderLayout());
-		cp.add(tabs);
+		
+		JPanel center = new JPanel(new BorderLayout());
+		cp.add(center);
+		
+		center.add(tabs);
 		newTab(null, editor);
 		
 		createActions();
 		createMenus();
-		
-		JPanel barsPanel = new JPanel(new BorderLayout());
-		cp.add(barsPanel, BorderLayout.PAGE_END);
-		
-		barsPanel.add(toolBar, BorderLayout.CENTER);
-		barsPanel.add(statusBar, BorderLayout.PAGE_END);
+
+		center.add(statusBar, BorderLayout.PAGE_END);
+		cp.add(toolBar, BorderLayout.PAGE_START);
 	}
 
 	/**
-	 * Returns an instance of {@linkplain JTabbedPane} with a
-	 * mouse listener and a {@linkplain ChangeListener}.
+	 * Returns an instance of {@linkplain JTabbedPane} with a mouse listener and
+	 * a {@linkplain ChangeListener}.
 	 * <p>
 	 * The mouse listener listens for double clicks and opens a new tab if the
-	 * user double-clicked on the tab pane.
+	 * user double-clicked on the tab pane. It also listens for a middle mouse
+	 * button click and closes the tab it was clicked on or the currently
+	 * selected tab.
 	 * <p>
 	 * The change listener listens for a state change and updates program
 	 * information based on the currently opened tab. The information that is
@@ -203,8 +219,11 @@ public class JNotepadPP extends JFrame {
 		pane.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mouseClicked(MouseEvent e) {
-				if (e.getClickCount() == 2) {
+				if (e.getButton() == MouseEvent.BUTTON1 && e.getClickCount() == 2) {
 					newAction.actionPerformed(null);
+				}
+				if (e.getButton() == MouseEvent.BUTTON2) {
+					closeTab(tabs.getSelectedIndex());
 				}
 			}
 		});
@@ -216,22 +235,17 @@ public class JNotepadPP extends JFrame {
 				
 				caretListener.caretUpdate(dummyCaretEvent);
 				
+				setEnabled(editor != null,
+					saveAction, saveAsAction, closeTabAction,
+					pasteAction, statisticsAction,
+					toUppercaseAction, toLowercaseAction, invertCaseAction,
+					calculateAverageAction
+				);
 				if (editor == null) {
-					setEnabled(false,
-						saveAction, saveAsAction, closeTabAction,
-						pasteAction, statisticsAction,
-						toUppercaseAction, toLowercaseAction, invertCaseAction
-					);
-					return;
+					setTitle(FRAME_TITLE);
 				} else {
-					setEnabled(true,
-						saveAction, saveAsAction, closeTabAction,
-						pasteAction, statisticsAction,
-						toUppercaseAction, toLowercaseAction, invertCaseAction
-					);
+					setTitle(editor.getName() + " - " + FRAME_TITLE);
 				}
-				
-				setTitle(editor.getName() + " - " + FRAME_TITLE);
 			}
 		});
 		
@@ -298,6 +312,9 @@ public class JNotepadPP extends JFrame {
 	 */
 	private void newTab(Path path, JEditor editor) {
 		editor.setFilePath(path);
+		editor.setFont(currentFont);
+		editor.setTabSize(DEFAULT_TAB_SIZE);
+		
 		String name = editor.getName();
 		
 		if (path != null) {
@@ -309,6 +326,7 @@ public class JNotepadPP extends JFrame {
 		
 		this.editor = editor;
 		editor.addCaretListener(caretListener);
+		editor.addMouseListener(selectionListener);
 
 		tabs.setSelectedIndex(tabs.getTabCount() - 1);
 	}
@@ -413,6 +431,29 @@ public class JNotepadPP extends JFrame {
 	};
 	
 	/**
+	 * A mouse listener that updates status of the status bar on mouse press
+	 * until the mouse is released.
+	 */
+	private MouseListener selectionListener = new MouseAdapter() {
+		
+		/** Indicates that the mouse has been released. */
+		private boolean released;
+
+		@Override
+		public void mousePressed(MouseEvent e) {
+			released = false;
+			new Thread(() -> {
+				while (!released) statusBar.updateStatus();
+			}, "Selection listener").start();
+		}
+		
+		@Override
+		public void mouseReleased(MouseEvent e) {
+			released = true;
+		};
+	};
+	
+	/**
 	 * Returns a <tt>JEditor</tt> at the specified <tt>index</tt>. Since
 	 * JEditors are wrapped in a <tt>JScrollPane</tt>, this method unpacks the
 	 * scroll pane and returns a JEditor. If the specified index is less than
@@ -483,18 +524,50 @@ public class JNotepadPP extends JFrame {
 			}
 			
 			String text = new String(bytes, StandardCharsets.UTF_8);
-			checkTab();
-			newTab(filepath, new JEditor(text));
+			
+			// Check if a tab with exactly the same file path and text is already open.
+			// If a tab like that does not exist, check if the current tab is untitled
+			// and has no content (no changes). If check is true, that tab is closed
+			// and the new tab takes its place.
+			// If a tab with same file path and text already exists, just switch to it.
+			int index = getTabIndex(filepath, text);
+			if (index == -1) {
+				checkCurrentTab();
+				newTab(filepath, new JEditor(text));
+			} else {
+				tabs.setSelectedIndex(index);
+			}
+				
 		}
 
 		/**
 		 * Checks if the current tab is an empty tab (if the current editor file
 		 * path is <tt>null</tt>) and closes the current tab if true.
 		 */
-		private void checkTab() {
-			if (editor.filePath == null) {
+		private void checkCurrentTab() {
+			if (editor != null && editor.filePath == null && !editor.changed) {
 				closeTab(tabs.getSelectedIndex());
 			}
+		}
+		
+		/**
+		 * Returns an index of tab if a tab with the specified <tt>filepath</tt>
+		 * and <tt>text</tt> is already open. Returns <tt>-1</tt> if the wanted
+		 * tab is not present.
+		 * 
+		 * @param filepath the path of the file
+		 * @param text editor text
+		 * @return index of a tab with specified parameters, or -1 if not present
+		 */
+		private int getTabIndex(Path filepath, String text) {
+			for (int i = 0, n = tabs.getTabCount(); i < n; i++) {
+				JEditor editor = getJEditorAt(i);
+				if (filepath.equals(editor.filePath) && text.equals(editor.getText())) {
+					return i;
+				}
+			}
+			
+			return -1;
 		}
 	};
 	
@@ -727,7 +800,7 @@ public class JNotepadPP extends JFrame {
 		 * @return the number of characters including whitespaces
 		 */
 		private String charactersWithSpaces() {
-			return Integer.toString(documentLength());
+			return Integer.toString(editor.documentLength());
 		}
 		
 		/**
@@ -739,15 +812,6 @@ public class JNotepadPP extends JFrame {
 			return Integer.toString(editor.getLineCount());
 		}
 	};
-	
-	/**
-	 * Returns the length of the current document.
-	 * 
-	 * @return the length of the current document
-	 */
-	private int documentLength() {
-		return editor.getText().length();
-	}
 	
 	//
     // Tools actions
@@ -761,7 +825,7 @@ public class JNotepadPP extends JFrame {
 		
 		@Override
 		public void actionPerformed(ActionEvent e) {
-			modifyText(Character::toUpperCase);
+			editor.modifyText(Character::toUpperCase);
 		}
 	};
 	
@@ -773,7 +837,7 @@ public class JNotepadPP extends JFrame {
 		
 		@Override
 		public void actionPerformed(ActionEvent e) {
-			modifyText(Character::toLowerCase);
+			editor.modifyText(Character::toLowerCase);
 		}
 	};
 	
@@ -785,7 +849,7 @@ public class JNotepadPP extends JFrame {
 		
 		@Override
 		public void actionPerformed(ActionEvent e) {
-			modifyText((c) -> {
+			editor.modifyText((c) -> {
 				if (Character.isLowerCase(c)) {
 					return Character.toUpperCase(c);
 				} else {
@@ -794,63 +858,6 @@ public class JNotepadPP extends JFrame {
 			});
 		}
 	};
-	
-	/**
-	 * Modifies the text of the current <tt>editor</tt>, character by character,
-	 * with the specified <tt>function</tt>.
-	 * <p>
-	 * If some text in the document is selected, the function only applies to
-	 * the selected characters. Else the function is applied to the entire
-	 * document.
-	 * 
-	 * @param function function for characters
-	 */
-	private void modifyText(Function<Character, Character> function) {
-		Document doc = editor.getDocument();
-		Caret caret = editor.getCaret();
-		
-		int len = Math.abs(caret.getDot() - caret.getMark());
-		int offset = 0;
-		if (len != 0) {
-			offset = Math.min(caret.getDot(), caret.getMark());
-		} else {
-			len = doc.getLength();
-		}
-		
-		try {
-			int dotPosition = caret.getDot();
-			int markPosition = caret.getMark();
-			
-			String text = doc.getText(offset, len);
-			text = changeCase(text, function);
-			doc.remove(offset, len);
-			doc.insertString(offset, text, null);
-			
-			caret.setDot(markPosition);
-			caret.moveDot(dotPosition);
-		} catch (BadLocationException ex) {
-			throw new InternalError(ex);
-		}
-	}
-	
-	/**
-	 * Changes the casing of the <tt>text</tt>, or generally speaking modifies
-	 * the text, character by character, with the specified <tt>function</tt>
-	 * and returns the modified text.
-	 * 
-	 * @param text text to be modified
-	 * @param function function which modifies the text
-	 * @return the modified text
-	 */
-	private static String changeCase(String text, Function<Character, Character> function) {
-		char[] znakovi = text.toCharArray();
-		
-		for (int i = 0; i < znakovi.length; i++) {
-			znakovi[i] = function.apply(znakovi[i]);
-		}
-		
-		return new String(znakovi);
-	}
 	
 	/**
 	 * Sorts the selected lines of text in an ascending order.
@@ -895,74 +902,12 @@ public class JNotepadPP extends JFrame {
 			int startLine = Math.min(line1, line2);
 			int endLine = Math.max(line1, line2);
 			
-			List<String> lines = getLines(startLine, endLine);
+			List<String> lines = editor.getLines(startLine, endLine);
 			Collections.sort(lines, ascending ? collator : collator.reversed());
-			replaceLines(lines, startLine, endLine);
+			editor.replaceLines(lines, startLine, endLine);
 		} catch (BadLocationException e) {
 			throw new InternalError(e);
 		}
-	}
-
-	/**
-	 * Returns a list of lines from the <tt>startLine</tt> to the
-	 * <tt>endLine</tt>.
-	 * 
-	 * @param startLine the starting line
-	 * @param endLine the ending line
-	 * @return a list of lines from the starting line to the ending line
-	 * @throws BadLocationException if {@linkplain JEditor} exception occurs
-	 */
-	private List<String> getLines(int startLine, int endLine) throws BadLocationException {
-		List<String> lines = new ArrayList<>();
-		
-		for (int i = startLine; i <= endLine; i++) {
-			lines.add(getLineText(i));
-		}
-		
-		return lines;
-	}
-	
-	/**
-	 * Returns the text of the specified <tt>line</tt>, without a newline
-	 * character.
-	 * 
-	 * @param line index of the line whose text is to be returned
-	 * @return the text of the specified line
-	 * @throws BadLocationException if {@linkplain JEditor} exception occurs
-	 */
-	private String getLineText(int line) throws BadLocationException {
-		int start = editor.getLineStartOffset(line);
-		int end = editor.getLineEndOffset(line);
-		
-		return editor.getText(start, end - start)
-				.replaceAll("\\r|\\n", "");
-	}
-	
-	/**
-	 * Replaces all lines from the <tt>startLine</tt> to the <tt>endLine</tt>
-	 * with the specified list of <tt>lines</tt>, inserting a newline character
-	 * after every list element except the last one.
-	 * 
-	 * @param lines list of lines to be inserted to document
-	 * @param startLine the starting line
-	 * @param endLine the ending line
-	 * @throws BadLocationException if {@linkplain JEditor} exception occurs
-	 */
-	private void replaceLines(List<String> lines, int startLine, int endLine) throws BadLocationException {
-		Document doc = editor.getDocument();
-		
-		StringJoiner sj = new StringJoiner("\n");
-		for (String line : lines) {
-			sj.add(line);
-		}
-		
-		int start = editor.getLineStartOffset(startLine);
-		int end = editor.getLineEndOffset(endLine);
-		
-		doc.remove(start, end-start);
-		doc.insertString(start, sj.toString(), null);
-		
-		editor.select(start, end);
 	}
 	
 	/**
@@ -980,10 +925,10 @@ public class JNotepadPP extends JFrame {
 				int startLine = Math.min(line1, line2);
 				int endLine = Math.max(line1, line2);
 				
-				List<String> lines = getLines(startLine, endLine);
+				List<String> lines = editor.getLines(startLine, endLine);
 				lines = removeDuplicates(lines);
-				replaceLines(lines, startLine, endLine);
-			} catch (BadLocationException ex) {
+				editor.replaceLines(lines, startLine, endLine);
+			} catch (BadLocationException|IndexOutOfBoundsException ex) {
 				throw new InternalError(ex);
 			}
 		}
@@ -1002,6 +947,25 @@ public class JNotepadPP extends JFrame {
 	};
 	
 	/**
+	 * Removes all line feeds and new line characters from the editor.
+	 */
+	private Action removeNewlinesAction = new LocalizableAction("removeNewlines", flp) {
+		private static final long serialVersionUID = 1L;
+		
+		@Override
+		public void actionPerformed(ActionEvent e) {
+			StringBuilder sb = new StringBuilder(editor.getDocument().getLength());
+			
+			for (String line : editor) {
+				sb.append(line).append(' ');
+			}
+			sb.setLength(sb.length()-1);
+			
+			editor.setText(sb.toString());
+		}
+	};
+	
+	/**
 	 * Shows/hides the floatable toolbar.
 	 */
 	private Action showHideToolbarAction = new LocalizableAction("hideToolbar", flp) {
@@ -1011,13 +975,133 @@ public class JNotepadPP extends JFrame {
 		public void actionPerformed(ActionEvent e) {
 			toolBar.setVisible(!toolBar.isVisible());
 			if (!toolBar.isVisible()) {
-				// programmatically click X if toolBar is floating
+				// TODO programmatically click X if toolBar is floating
 				setKey("showToolbar");
 				showHideToolbarAction.putValue(Action.SMALL_ICON, Icons.SHOW_TOOLBAR);
 			} else {
 				setKey("hideToolbar");
 				showHideToolbarAction.putValue(Action.SMALL_ICON, Icons.HIDE_TOOLBAR);
 			}
+		}
+	};
+	
+	/**
+	 * Wraps the text if it is wider than the editor width.
+	 */
+	private Action wrapTextAction = new LocalizableAction("wrapText", flp) {
+		private static final long serialVersionUID = 1L;		
+		
+		@Override
+		public void actionPerformed(ActionEvent e) {
+			editor.setLineWrap(!editor.getLineWrap());
+			if (!editor.getLineWrap()) {
+				setKey("wrapText");
+				wrapTextAction.putValue(Action.SMALL_ICON, Icons.WRAP_TEXT);
+			} else {
+				setKey("unwrapText");
+				wrapTextAction.putValue(Action.SMALL_ICON, Icons.UNWRAP_TEXT);
+			}
+		}
+	};
+	
+	/**
+	 * Calculates the average number of all parsable numbers that are present in
+	 * the editor.
+	 */
+	private Action calculateAverageAction = new LocalizableAction("calculateAverage", flp) {
+		private static final long serialVersionUID = 1L;		
+		
+		@Override
+		public void actionPerformed(ActionEvent e) {
+			List<Double> numbers = getNumbers();
+			
+			OptionalDouble od = getAverage(numbers);
+			if (od.isPresent()) {
+				JOptionPane.showMessageDialog(
+					JNotepadPP.this,
+					flp.getString("outOf")+" "+numbers.size()+" "+flp.getString("parsedNumbers")+" "+
+					flp.getString("averageIs") + ": " + od.getAsDouble(),
+					flp.getString("average"),
+					JOptionPane.INFORMATION_MESSAGE);
+			} else {
+				JOptionPane.showMessageDialog(
+					JNotepadPP.this,
+					flp.getString("noParsableNumbers"),
+					flp.getString("warning"),
+					JOptionPane.WARNING_MESSAGE);
+			}
+		}
+		
+		/**
+		 * Gets current text from the editor, parses all parsable words into
+		 * doubles and returns a list of {@code Double}s.
+		 * 
+		 * @return a list of {@code Double} numbers
+		 */
+		private List<Double> getNumbers() {
+			String text = editor.getText();
+			String[] words = text.split("\\s+");
+
+			List<Double> numbers = new ArrayList<>();
+			for (String word : words) {
+				try {
+					Double number = Double.parseDouble(word);
+					numbers.add(number);
+				} catch (NumberFormatException ignorable) {}
+			}
+			
+			return numbers;
+		}
+		
+		/**
+		 * Returns an {@code OptionalDouble} as an average of the specified list
+		 * of {@code Double} <tt>numbers</tt>.
+		 * 
+		 * @param numbers list of {@code Double}s
+		 * @return an {@code OptionalDouble} as an average of the numbers
+		 */
+		private OptionalDouble getAverage(List<Double> numbers) {
+			return numbers.stream().mapToDouble(Double::valueOf).average();
+		}
+	};
+	
+	/**
+	 * Calculates the average number of all parsable numbers that are present in
+	 * the editor.
+	 */
+	private Action openLinksAction = new LocalizableAction("openLinks", flp) {
+		private static final long serialVersionUID = 1L;
+
+		@Override
+		public void actionPerformed(ActionEvent e) {
+			for (String line : editor) {
+				openWebpage(line);
+			}
+		}
+
+		/**
+		 * Opens an URL specified by the <tt>urlString</tt> with the default web
+		 * browser.
+		 * 
+		 * @param urlString URL to be opened
+		 */
+		private void openWebpage(String urlString) {
+			if (urlString.startsWith("www.")) {
+				urlString = "http://".concat(urlString);
+			}
+			
+			
+			try {
+				// Open URL default browser (normal mode)
+//				Desktop.getDesktop().browse(new URL(urlString).toURI());
+				
+				// Open URL in Google Chrome (incognito mode)
+				new ProcessBuilder(
+					"C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+					"-incognito",
+					urlString
+				).start();
+			} catch (Exception notAWebpage) {}
 		}
 	};
 	
@@ -1072,8 +1156,13 @@ public class JNotepadPP extends JFrame {
 		putActionValue(sortAscendingAction, "control shift UP", KeyEvent.VK_A, Icons.ASCENDING);
 		putActionValue(sortDescendingAction, "control shift DOWN", KeyEvent.VK_D, Icons.DESCENDING);
 		putActionValue(uniqueAction, "control U", KeyEvent.VK_U, Icons.UNIQUE);
-		
+		putActionValue(removeNewlinesAction, "control R", KeyEvent.VK_R, Icons.REMOVE_NEWLINES);
+
 		putActionValue(showHideToolbarAction, "control shift T", KeyEvent.VK_T, Icons.HIDE_TOOLBAR);
+		putActionValue(wrapTextAction, "control shift W", KeyEvent.VK_W, Icons.WRAP_TEXT);
+
+		putActionValue(calculateAverageAction, "control shift A", KeyEvent.VK_A, Icons.CALCULATE_AVERAGE);
+		putActionValue(openLinksAction, "control L", KeyEvent.VK_L, Icons.OPEN_LINKS);
 		
 		putActionValue(aboutAction, "F1", KeyEvent.VK_A, Icons.ABOUT);
 		aboutAction.putValue(Action.NAME, aboutAction.getValue(Action.NAME) + " " + FRAME_TITLE);
@@ -1157,15 +1246,21 @@ public class JNotepadPP extends JFrame {
 
 		sortMenu.add(new JMenuItem(sortAscendingAction));
 		sortMenu.add(new JMenuItem(sortDescendingAction));
-		
+
 		toolsMenu.add(new JMenuItem(uniqueAction));
+		toolsMenu.add(new JMenuItem(removeNewlinesAction));
 		toolsMenu.addSeparator();
 		
 		// Change language menu
 		JMenu changeLanguageMenu = createLanguageMenu();
 		toolsMenu.add(changeLanguageMenu);
-		
+
 		toolsMenu.add(new JMenuItem(showHideToolbarAction));
+		toolsMenu.add(new JMenuItem(wrapTextAction));
+		toolsMenu.addSeparator();
+
+		toolsMenu.add(new JMenuItem(calculateAverageAction));
+		toolsMenu.add(new JMenuItem(openLinksAction));
 		
 		
 		/* Help menu */
@@ -1188,6 +1283,8 @@ public class JNotepadPP extends JFrame {
 		changeLanguageMenu.add(new JMenuItem(new LanguageAction("de", Icons.DE)));
 		changeLanguageMenu.add(new JMenuItem(new LanguageAction("fr", Icons.FR)));
 		changeLanguageMenu.add(new JMenuItem(new LanguageAction("hr", Icons.HR)));
+		changeLanguageMenu.add(new JMenuItem(new LanguageAction("ja", Icons.JA)));
+		changeLanguageMenu.add(new JMenuItem(new LanguageAction("zh", Icons.ZH)));
 		
 		return changeLanguageMenu;
 	}
@@ -1239,7 +1336,7 @@ public class JNotepadPP extends JFrame {
 			toolBar.setName(flp.getString("tools"));
 		});
 		
-		// Scroll up-down / left-right on toolbar
+		// TODO Scroll up-down / left-right on toolbar
 		toolBar.addMouseWheelListener((e) -> {
 			final int SCROLL_SPEED = 10;
 			
@@ -1257,6 +1354,25 @@ public class JNotepadPP extends JFrame {
 		});
 		
 		return toolBar;
+	}
+	
+	/**
+	 * Creates a {@code JFileChooser} with default system look and feel.
+	 * 
+	 * @return {@code JFileChooser} with system look and feel
+	 */
+	public JFileChooser createJFileChooser() {
+		JFileChooser chooser = null;
+		
+		LookAndFeel old = UIManager.getLookAndFeel();
+		try {
+			UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+			chooser = new JFileChooser();
+			UIManager.setLookAndFeel(old);
+		} catch (Exception ignorable) {}
+		
+		return chooser != null ?
+			chooser : new JFileChooser();
 	}
 
 	//
@@ -1296,20 +1412,40 @@ public class JNotepadPP extends JFrame {
 		 * Constructs an instance of {@code LanguageAction} with the specified
 		 * language tag and image icon.
 		 * <p>
-		 * The action name is set to a value with property key <tt>language</tt>.
+		 * The action name is set to a string from the specified
+		 * <tt>language</tt> tag.
 		 * 
 		 * @param language language tag
 		 * @param icon language icon
 		 */
 		public LanguageAction(String language, ImageIcon icon) {
 			this.language = language;
-			putValue(Action.NAME, flp.getString(language));
+			
+			putValue(Action.NAME, getLanguageName(language));
 			putValue(Action.SMALL_ICON, icon);
 		}
 
 		@Override
 		public void actionPerformed(ActionEvent e) {
 			LocalizationProvider.getInstance().setLanguage(language);
+		}
+		
+		/**
+		 * Returns the full language name from the specified <tt>tag</tt> by
+		 * getting a field value from the {@linkplain Languages} class.
+		 * 
+		 * @param tag language tag
+		 * @return full language name from the specified tag
+		 * @throws RuntimeException if field <tt>tag.toUpperCase()</tt> could
+		 * not be loaded
+		 */
+		private String getLanguageName(String tag) {
+			try {
+				return (String) Languages.class.getDeclaredField(
+						language.toUpperCase()).get(String.class);
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			}
 		}
 		
 	}
@@ -1330,7 +1466,14 @@ public class JNotepadPP extends JFrame {
 		private static final long serialVersionUID = 1L;
 		
 		/** Length of the current document. */
-		private JLabel length = new LJLabel("length", flp);
+		private JLabel length = new LJLabel("length", flp) {
+			private static final long serialVersionUID = 1L;
+			
+			public Dimension getPreferredSize() {
+				Dimension dim = super.getPreferredSize();
+				return new Dimension(Math.max(90, dim.width), dim.height);
+			}
+		};
 		
 		/** Current caret line. */
 		private JLabel ln = new LJLabel("ln", flp);
@@ -1338,6 +1481,8 @@ public class JNotepadPP extends JFrame {
 		private JLabel col = new LJLabel("col", flp);
 		/** Current caret selection length. */
 		private JLabel sel = new LJLabel("sel", flp);
+		/** Current caret offset from beginning. */
+		private JLabel off = new LJLabel("off", flp);
 		
 		/**
 		 * Constructs an instance of a status bar by adding and initializing the
@@ -1355,8 +1500,9 @@ public class JNotepadPP extends JFrame {
 			caretInfo.add(ln);
 			caretInfo.add(col);
 			caretInfo.add(sel);
+			caretInfo.add(off);
 			
-			left.add(length, BorderLayout.LINE_START); // add glue, box?
+			left.add(length, BorderLayout.LINE_START);
 			left.add(appendSeparator(caretInfo), BorderLayout.LINE_END);
 			updateStatus();
 			
@@ -1395,6 +1541,7 @@ public class JNotepadPP extends JFrame {
 				ln.setText("");
 				col.setText("");
 				sel.setText("");
+				off.setText("");
 				return;
 			}
 			
@@ -1403,11 +1550,13 @@ public class JNotepadPP extends JFrame {
 				int line = editor.getLineOfOffset(caret.getDot());
 				int column = caret.getDot() - editor.getLineStartOffset(line);
 				int select = Math.abs(caret.getDot() - caret.getMark());
+				int offset = caret.getDot();
 				
-				length.setText(flp.getString("length") + ": " + documentLength());
+				length.setText(flp.getString("length") + ": " + editor.documentLength());
 				ln.setText(flp.getString("ln") + ": " + (line+1));
 				col.setText(flp.getString("col") + ": " + column);
 				sel.setText(flp.getString("sel") + ": " + select);
+				off.setText(flp.getString("off") + ": " + offset);
 			} catch (BadLocationException e) {
 				throw new InternalError(e);
 			}
@@ -1483,12 +1632,15 @@ public class JNotepadPP extends JFrame {
 	 *
 	 * @author Mario Bobic
 	 */
-	public class JEditor extends JTextArea {
+	public class JEditor extends JTextArea implements Iterable<String> {
 		/** Serialization UID. */
 		private static final long serialVersionUID = 1L;
 		
 		/** Flag that indicates if a document change has been made. */
 		private boolean changed;
+		
+		/** Editor contents since it was last saved. */
+		private String lastSaved;
 		
 		/** The path of the file that is currently opened. */
 		private Path filePath;
@@ -1562,6 +1714,8 @@ public class JNotepadPP extends JFrame {
 			super(doc, text, rows, columns);
 			
 			getDocument().addDocumentListener(getDocumentListener());
+			lastSaved = getText();
+			setWrapStyleWord(true);
 		}
 		
 		/**
@@ -1586,8 +1740,14 @@ public class JNotepadPP extends JFrame {
 				
 				@Override
 				public void changedUpdate(DocumentEvent e) {
-					changed = true;
-					tabs.setIconAt(tabs.getSelectedIndex(), Icons.UNSAVED);
+					if (!changed) {
+						setChanged(true);
+					}
+					
+					// If editor returned to last saved state
+					if (Objects.equals(getText(), lastSaved)) {
+						setChanged(false);
+					}
 				}
 			};
 		}
@@ -1620,6 +1780,9 @@ public class JNotepadPP extends JFrame {
 		public void setChanged(boolean changed) {
 			this.changed = changed;
 			tabs.setIconAt(tabs.getSelectedIndex(), changed ? Icons.UNSAVED : Icons.SAVED);
+			if (!changed) {
+				lastSaved = getText();
+			}
 		}
 
 		/**
@@ -1639,6 +1802,165 @@ public class JNotepadPP extends JFrame {
 		 */
 		public void setFilePath(Path filePath) {
 			this.filePath = filePath;
+		}
+		
+		/**
+		 * Returns the length of the current document.
+		 * 
+		 * @return the length of the current document
+		 */
+		public int documentLength() {
+			return getDocument().getLength();
+		}
+
+		/**
+		 * Returns a list of lines from the <tt>startLine</tt> to the
+		 * <tt>endLine</tt>.
+		 * 
+		 * @param startLine the starting line
+		 * @param endLine the ending line
+		 * @return a list of lines from the starting line to the ending line
+		 * @throws IndexOutOfBoundsException if start or end line are out of bounds
+		 */
+		public List<String> getLines(int startLine, int endLine) {
+			List<String> lines = new ArrayList<>();
+			
+			for (int i = startLine; i <= endLine; i++) {
+				lines.add(getLineText(i));
+			}
+			
+			return lines;
+		}
+		
+		/**
+		 * Returns the text of the specified <tt>line</tt>, without a newline
+		 * character.
+		 * 
+		 * @param lineIndex index of the line whose text is to be returned
+		 * @return the text of the specified line
+		 * @throws IndexOutOfBoundsException if the line index is out of bounds
+		 */
+		public String getLineText(int lineIndex) {
+			try {
+				int start = getLineStartOffset(lineIndex);
+				int end = getLineEndOffset(lineIndex);
+				
+				return getText(start, end - start).replaceAll("\\r|\\n", "");
+			} catch (BadLocationException e) {
+				throw new IndexOutOfBoundsException(e.getMessage());
+			}
+		}
+		
+		/**
+		 * Replaces all lines from the <tt>startLine</tt> to the <tt>endLine</tt>
+		 * with the specified list of <tt>lines</tt>, inserting a newline character
+		 * after every list element except the last one.
+		 * 
+		 * @param lines list of lines to be inserted to document
+		 * @param startLine the starting line
+		 * @param endLine the ending line
+		 * @throws BadLocationException if {@linkplain JEditor} exception occurs
+		 */
+		public void replaceLines(List<String> lines, int startLine, int endLine) throws BadLocationException {
+			Document doc = getDocument();
+			
+			StringJoiner sj = new StringJoiner("\n");
+			for (String line : lines) {
+				sj.add(line);
+			}
+			
+			int start = getLineStartOffset(startLine);
+			int end = getLineEndOffset(endLine);
+			
+			doc.remove(start, end-start);
+			doc.insertString(start, sj.toString(), null);
+			
+			select(start, end);
+		}
+		
+		/**
+		 * Modifies the text of the current <tt>editor</tt>, character by character,
+		 * with the specified <tt>function</tt>.
+		 * <p>
+		 * If some text in the document is selected, the function only applies to
+		 * the selected characters. Else the function is applied to the entire
+		 * document.
+		 * 
+		 * @param function function for characters
+		 */
+		public void modifyText(Function<Character, Character> function) {
+			Document doc = getDocument();
+			Caret caret = getCaret();
+			
+			int len = Math.abs(caret.getDot() - caret.getMark());
+			int offset = 0;
+			if (len != 0) {
+				offset = Math.min(caret.getDot(), caret.getMark());
+			} else {
+				len = doc.getLength();
+			}
+			
+			try {
+				int dotPosition = caret.getDot();
+				int markPosition = caret.getMark();
+				
+				String text = doc.getText(offset, len);
+				text = changeCharacters(text, function);
+				doc.remove(offset, len);
+				doc.insertString(offset, text, null);
+				
+				caret.setDot(markPosition);
+				caret.moveDot(dotPosition);
+			} catch (BadLocationException ex) {
+				throw new InternalError(ex);
+			}
+		}
+		
+		/**
+		 * Modifies the text, character by character, with the specified
+		 * <tt>function</tt> and returns the modified text.
+		 * 
+		 * @param text text to be modified
+		 * @param function function which modifies the text
+		 * @return the modified text
+		 */
+		private /*static*/ String changeCharacters(String text, Function<Character, Character> function) {
+			char[] znakovi = text.toCharArray();
+			
+			for (int i = 0; i < znakovi.length; i++) {
+				znakovi[i] = function.apply(znakovi[i]);
+			}
+			
+			return new String(znakovi);
+		}
+
+		@Override
+		public Iterator<String> iterator() {
+			return new JEditorIterator();
+		}
+		
+		/**
+		 * Iterator of class JEditor.
+		 *
+		 * @author Mario Bobic
+		 */
+		private class JEditorIterator implements Iterator<String> {
+			
+			/** Line to be handed out next. */
+			private int currentLine = 0;
+			/** Total line count of this editor. */
+			private int lineCount = getLineCount();
+
+			@Override
+			public boolean hasNext() {
+				return currentLine < lineCount;
+			}
+
+			@Override
+			public String next() {
+				return getLineText(currentLine++);
+			}
+			
 		}
 	}
 

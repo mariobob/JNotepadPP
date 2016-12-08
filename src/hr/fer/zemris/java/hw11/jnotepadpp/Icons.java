@@ -83,11 +83,26 @@ public class Icons {
 	/** The unique icon. */
 	public static final ImageIcon UNIQUE = getMenuIcon("icons/unique.png");
 
+	/** The remove newlines icon. */
+	public static final ImageIcon REMOVE_NEWLINES = getMenuIcon("icons/removeNewlines.png");
+
 	/** The show toolbar icon. */
 	public static final ImageIcon SHOW_TOOLBAR = getMenuIcon("icons/showToolbar.png");
 
 	/** The hide toolbar icon. */
 	public static final ImageIcon HIDE_TOOLBAR = getMenuIcon("icons/hideToolbar.png");
+
+	/** The wrap text icon. */
+	public static final ImageIcon WRAP_TEXT = getMenuIcon("icons/wrapText.png");
+
+	/** The unwrap text icon. */
+	public static final ImageIcon UNWRAP_TEXT = getMenuIcon("icons/unwrapText.png");
+	
+	/** The calculate average icon. */
+	public static final ImageIcon CALCULATE_AVERAGE = getMenuIcon("icons/calculateAverage.png");
+	
+	/** The open links icon. */
+	public static final ImageIcon OPEN_LINKS = getMenuIcon("icons/openLinks.png");
 	
 	/** The about icon. */
 	public static final ImageIcon ABOUT = getMenuIcon("icons/about.png");
@@ -103,9 +118,15 @@ public class Icons {
 
 	/** The French language icon. */
 	public static final ImageIcon FR = getFlagIcon("icons/flags/fr.png");
-	
+
 	/** The Croatian language icon. */
 	public static final ImageIcon HR = getFlagIcon("icons/flags/hr.png");
+
+	/** The Japanese language icon. */
+	public static final ImageIcon JA = getFlagIcon("icons/flags/ja.png");
+
+	/** The Chinese language icon. */
+	public static final ImageIcon ZH = getFlagIcon("icons/flags/zh.png");
 	
 	
 	/**

@@ -1,6 +1,7 @@
 package hr.fer.zemris.java.hw11.jnotepadpp.localization;
 
 import java.util.Locale;
+import java.util.MissingResourceException;
 import java.util.ResourceBundle;
 
 /**
@@ -78,7 +79,14 @@ public class LocalizationProvider extends AbstractLocalizationProvider {
 
 	@Override
 	public String getString(String key) {
-		return bundle.getString(key);
+		try {
+			return bundle.getString(key);
+		} catch (MissingResourceException e) {
+			return ResourceBundle.getBundle(
+				TRANSLATION_PATH,
+				Locale.forLanguageTag(ResourceLanguage.DEFAULT_LANGUAGE)
+			).getString(key);
+		}
 	}
 	
 }
